@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.log
+queue_state.json
+history.json
+settings.json
+.venv/
+venv/

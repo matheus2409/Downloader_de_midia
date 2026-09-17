@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Downloader de mídias</title>
+  <link rel="icon" href="icon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div>
+        <h1>Downloader de mídias</h1>
+        <p>baixe vídeos, imagens, áudios, documentos e pastas/playlists inteiras de uma vez</p>
+      </div>
+      <div class="header-actions">
+        <button id="cookies-btn" class="ghost" title="Configurar login/cookies para sites que exigem conta">🔑 Login/Cookies</button>
+        <button id="diagnostics-btn" class="ghost" title="Achar downloads que vieram como thumbnail em vez do conteúdo pedido">🩺 Diagnóstico</button>
+        <button id="integration-btn" class="ghost" title="Chave de API e webhook para integrar com outras ferramentas">🔌 Integração</button>
+        <button id="history-btn" class="ghost">Histórico</button>
+        <button id="import-btn" class="ghost">Importar .txt</button>
+        <input id="import-file-input" type="file" accept=".txt" style="display:none" />
+      </div>
+    </div>
+
+    <div id="ffmpeg-banner" class="banner">
+      Não consegui preparar o ffmpeg automaticamente (pode ser falta de internet no primeiro uso) —
+      conversão para MP3 e junção de áudio/vídeo vão falhar até resolver isso. Se persistir, instale manualmente em
+      <a href="https://ffmpeg.org/download.html" target="_blank" style="color:inherit">ffmpeg.org/download.html</a>.
+    </div>
+
+    <div id="health-banner" class="banner banner-row">
+      <span id="health-banner-text"></span>
+      <button id="health-banner-btn" class="ghost small">🔑 Configurar cookies</button>
+    </div>
+
+    <div class="options-bar">
+      <div class="field">
+        <label>Salvar em</label>
+        <div class="field-row">
+          <input id="folder-input" type="text" placeholder="/caminho/da/pasta" />
+          <button id="browse-btn">Escolher pasta</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Qualidade</label>
+        <div class="field-row">
+          <select id="preset-select"></select>
+          <button id="preset-edit-btn" class="ghost" title="Editar presets">⚙</button>
+        </div>
+      </div>
+      <div class="field narrow">
+        <label>Simultâneos</label>
+        <input id="concurrent-input" type="number" min="1" max="10" value="3" />
+      </div>
+      <div class="field narrow">
+        <label>&nbsp;</label>
+        <label class="checkbox-label" title="Baixa legenda em português/inglês junto, quando o site tiver"><input id="subtitles-check" type="checkbox" /> 🗨️ Legendas</label>
+      </div>
+    </div>
+
+    <textarea id="url-box" class="url-box"
+      placeholder="Cole um ou mais links (um por linha) — inclusive pastas do Pinterest ou playlists — ou arraste links / um .txt até aqui"></textarea>
+    <p class="hint">Cole o link de uma pasta/playlist inteira e o app expande sozinho para cada item de dentro.</p>
+
+    <div class="list-toolbar">
+      <input id="search-input" type="text" placeholder="🔍 Buscar na fila por título ou link..." />
+    </div>
+
+    <div class="action-row">
+      <label class="checkbox-label schedule-toggle"><input id="schedule-check" type="checkbox" /> ⏰ Agendar para depois</label>
+      <input id="schedule-datetime" type="datetime-local" style="display:none" />
+      <button id="download-btn" class="primary">Baixar</button>
+    </div>
+
+    <div class="batch-bar">
+      <button id="pause-all-btn" class="ghost small">Pausar tudo</button>
+      <button id="resume-all-btn" class="ghost small">Retomar tudo</button>
+      <button id="retry-failed-btn" class="ghost small">Tentar de novo os que falharam</button>
+      <button id="clear-done-btn" class="ghost small">Limpar concluídos</button>
+    </div>
+
+    <div id="list" class="list">
+      <div class="empty-hint" id="empty-hint">Nada na fila ainda — cole um link acima para começar.</div>
+    </div>
+
+    <div class="overall">
+      <span id="overall-label">Nada na fila</span>
+      <div class="card-progress">
+        <div class="card-progress-fill" id="overall-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toast-stack"></div>
+
+  <!-- history modal -->
+  <div class="modal-backdrop" id="history-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Histórico de downloads</h2>
+        <button class="ghost small" data-close="history-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <input id="history-search-input" type="text" placeholder="🔍 Buscar no histórico..." />
+        <p class="hint">Clique num item para abrir a pasta onde foi salvo.</p>
+        <div class="scroll-list" id="history-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="history-clear-btn" class="ghost small">Limpar histórico</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- folder browser modal -->
+  <div class="modal-backdrop" id="folder-modal">
+    <div class="modal folder-browser">
+      <div class="modal-header">
+        <h2>Escolher pasta</h2>
+        <button class="ghost small" data-close="folder-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="path" id="folder-current-path"></div>
+        <div class="scroll-list" id="folder-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="folder-up-btn" class="ghost small">⬆ Voltar</button>
+        <button id="folder-choose-btn" class="primary small">Usar esta pasta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- cookies/login modal -->
+  <div class="modal-backdrop" id="cookies-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Login / Cookies</h2>
+        <button class="ghost small" data-close="cookies-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="hint">
+          Alguns sites (YouTube incluso) passaram a exigir login pra liberar o download — aparece
+          como "o site pede login" ou "sign in to confirm you're not a bot". Configurando cookies
+          aqui, os downloads novos passam a usar sua sessão já logada nesse site.
+        </p>
+        <div class="field">
+          <label>Fonte dos cookies</label>
+          <select id="cookies-mode-select">
+            <option value="none">Nenhuma (desativado)</option>
+            <option value="file">Arquivo cookies.txt</option>
+            <option value="browser">Navegador instalado</option>
+          </select>
+        </div>
+        <div class="field" id="cookies-file-field" style="display:none">
+          <label>Caminho do cookies.txt</label>
+          <input id="cookies-file-input" type="text" placeholder="C:\Users\voce\cookies.txt" />
+          <p class="hint">
+            Exporte estando logado no site, com uma extensão tipo "Get cookies.txt LOCALLY".
+            Funciona pra qualquer navegador — inclusive Opera GX, que o yt-dlp não lê direto (veja
+            a opção "Navegador instalado" abaixo).
+          </p>
+        </div>
+        <div class="field" id="cookies-browser-field" style="display:none">
+          <label>Navegador</label>
+          <select id="cookies-browser-select"></select>
+          <p class="hint">
+            O yt-dlp lê o cookie storage desse navegador direto — feche-o antes de baixar, ou a
+            leitura pode falhar por arquivo bloqueado. Não cobre Opera GX (só a Opera "normal");
+            pra Opera GX use "Arquivo cookies.txt" acima.
+          </p>
+        </div>
+        <p class="hint">Vale só para downloads adicionados depois de salvar — itens já na fila mantêm a configuração de quando foram adicionados.</p>
+      </div>
+      <div class="modal-footer">
+        <button id="cookies-save-btn" class="primary small">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- diagnostics modal -->
+  <div class="modal-backdrop" id="diagnostics-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Diagnóstico do histórico</h2>
+        <button class="ghost small" data-close="diagnostics-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="hint">
+          Cruza o histórico com o log do servidor pra achar downloads que provavelmente vieram como
+          thumbnail (imagem) em vez do vídeo/áudio pedido — o padrão que passou a ser barrado a partir
+          desta versão, mas que pode ter deixado itens assim no seu histórico de antes.
+        </p>
+        <p class="hint" id="diagnostics-summary">Abrindo...</p>
+        <div class="scroll-list" id="diagnostics-list"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="diagnostics-select-all-btn" class="ghost small">Marcar/desmarcar todos</button>
+        <button id="diagnostics-redownload-btn" class="primary small">Re-baixar selecionados</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- integration modal -->
+  <div class="modal-backdrop" id="integration-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Integração (API / webhook)</h2>
+        <button class="ghost small" data-close="integration-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="hint">
+          Pensado pra outra ferramenta (ex.: um workflow do n8n) enfileirar downloads ou ser avisada
+          quando um terminar, sem precisar abrir esta página. O servidor continua acessível só pela sua
+          própria máquina (127.0.0.1) de qualquer forma — isso aqui não abre o app pra internet.
+        </p>
+        <div class="field">
+          <label>Chave de API (opcional)</label>
+          <input id="api-key-input" type="text" placeholder="deixe em branco pra não exigir" />
+          <p class="hint">
+            Quando preenchida, chamadas em <code>POST /api/downloads</code> feitas por fora desta
+            página precisam do cabeçalho <code>X-API-Key</code> com esse valor.
+          </p>
+        </div>
+        <div class="field">
+          <label>Webhook (opcional)</label>
+          <input id="webhook-url-input" type="text" placeholder="https://.../webhook/..." />
+          <p class="hint">Recebe um POST em JSON toda vez que um download terminar (sucesso ou erro de verdade).</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="integration-save-btn" class="primary small">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- preset editor modal -->
+  <div class="modal-backdrop" id="preset-modal">
+    <div class="modal" style="width:min(680px,92vw)">
+      <div class="modal-header">
+        <h2>Editar qualidades (presets)</h2>
+        <button class="ghost small" data-close="preset-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="preset-editor">
+          <div class="preset-list">
+            <div class="scroll-list" id="preset-list"></div>
+            <div class="field-row">
+              <button id="preset-new-btn" class="ghost small">Novo</button>
+              <button id="preset-remove-btn" class="ghost small">Remover</button>
+            </div>
+          </div>
+          <div class="preset-json">
+            <label class="hint">Opções do yt-dlp (JSON)</label>
+            <textarea id="preset-json-input" placeholder='{"format": "bv*+ba/b"}'></textarea>
+            <button id="preset-save-btn" class="primary small">Salvar alterações neste preset</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

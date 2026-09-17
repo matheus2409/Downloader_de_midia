@@ -1,0 +1,18 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+# YouTube muda a detecção de "bot" com frequência e o yt-dlp lança
+# patches quase toda semana pra acompanhar (ver changelog:
+# https://github.com/yt-dlp/yt-dlp/releases) — >=2024.1 ficou velho
+# demais e deixa passar instalação de uma versão sem os patches atuais.
+# Isso só afeta uma instalação NOVA: se você já tem o venv criado, rode
+# `pip install -U yt-dlp` de vez em quando também (o app avisa na aba
+# quando detecta que a versão instalada ficou pra trás).
+yt-dlp>=2026.7.4
+pydantic>=2.0
+imageio-ffmpeg>=0.5
+# Segundo motor de download (Instagram/Pinterest — ver
+# server/gallery_engine.py): mesmo espírito do aviso acima sobre o
+# yt-dlp — Instagram e Pinterest mudam de layout com frequência, e o
+# gallery-dl lança patches pra acompanhar. `pip install -U gallery-dl`
+# de vez em quando também.
+gallery-dl>=1.32.3
